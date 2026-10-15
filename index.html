@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diatom Adventure</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .scene {
+    position: fixed;
+    inset: 0;
+    display: none;
+  }
+  .scene.active { display: block; }
+
+  #scene1 {
+    background: url("assets/inside-scene.jpg") center / cover no-repeat;
+  }
+  #scene2 { background: #000; }
+
+  .sprite {
+    position: absolute;
+    display: block;
+    -webkit-user-drag: none;
+  }
+  .sprite img {
+    display: block;
+    width: 100%;
+    height: auto;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+  .hidden { display: none !important; }
+
+  /* ---------- Scene 1 ---------- */
+  #guy1 {
+    left: 8%;
+    bottom: 6%;
+    width: min(26vw, 260px);
+  }
+  #hat {
+    left: 8%;
+    width: min(26vw, 260px);
+    /* sits just above the guy; JS refines this once images load */
+    bottom: calc(6% + min(26vw, 260px) * 1.1);
+    display: flex;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+  }
+  #hat img { width: 60%; }
+  #guyWithHat1 {
+    left: 8%;
+    bottom: 6%;
+    width: min(26vw, 260px);
+    cursor: grab;
+    touch-action: none;
+    z-index: 3;
+  }
+  #guyWithHat1.dragging { cursor: grabbing; }
+  #door {
+    right: 8%;
+    bottom: 6%;
+    width: min(24vw, 240px);
+    z-index: 1;
+  }
+  #door.glow img { filter: drop-shadow(0 0 18px #fff6b0); }
+
+  /* ---------- Scene 2 ---------- */
+  #house {
+    left: 4%;
+    bottom: 22%;
+    width: min(40vw, 420px);
+  }
+  #guy2 {
+    left: calc(4% + min(40vw, 420px) * 0.3);
+    bottom: 18%;
+    width: min(16vw, 160px);
+    z-index: 2;
+  }
+  #car {
+    left: 50%;
+    bottom: 2%;
+    width: min(34vw, 340px);
+    transform: translateX(-50%);
+    cursor: pointer;
+    z-index: 3;
+  }
+  #car.driving {
+    cursor: default;
+    transition: transform 1.6s ease-in;
+  }
+
+  /* ---------- Animations ---------- */
+  .bob { animation: bob 1.6s ease-in-out infinite; }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  .shake { animation: shake 0.12s linear infinite; }
+  @keyframes shake {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    25%  { transform: translate(-2px, 1px) rotate(-0.6deg); }
+    50%  { transform: translate(2px, -1px) rotate(0.6deg); }
+    75%  { transform: translate(-1px, -1px) rotate(-0.3deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Scene 1 -->
+<section id="scene1" class="scene active">
+  <div id="guy1" class="sprite"><img src="assets/diatom-guy.png" alt="Diatom guy"></div>
+  <div id="hat" class="sprite"><img class="bob" src="assets/hat.png" alt="Hat"></div>
+  <div id="guyWithHat1" class="sprite hidden"><img class="bob" src="assets/diatom-guy-with-hat.png" alt="Diatom guy with hat"></div>
+  <div id="door" class="sprite hidden"><img src="assets/door.png" alt="Door"></div>
+</section>
+
+<!-- Scene 2 -->
+<section id="scene2" class="scene">
+  <div id="house" class="sprite"><img src="assets/house.png" alt="House"></div>
+  <div id="guy2" class="sprite"><img src="assets/diatom-guy-with-hat.png" alt="Diatom guy with hat"></div>
+  <div id="car" class="sprite"><img src="assets/car.png" alt="Car"></div>
+</section>
+
+<script>
+  // Which way the car leaves the screen at the end of Scene 2: "right" or "left".
+  const CAR_EXIT_DIRECTION = "right";
+
+  const $ = (id) => document.getElementById(id);
+
+  // If an asset is missing, draw a labelled placeholder so the game stays playable.
+  document.querySelectorAll("img").forEach((img) => {
+    img.addEventListener("error", () => {
+      const label = img.getAttribute("src");
+      if (label.startsWith("data:")) return;
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="160">` +
+        `<rect x="2" y="2" width="196" height="156" rx="12" fill="#3b6" stroke="#fff" stroke-width="3"/>` +
+        `<text x="100" y="85" font-family="sans-serif" font-size="13" fill="#fff" text-anchor="middle">${label}</text>` +
+        `</svg>`;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+  });
+
+  /* ---------- Scene 1 ---------- */
+  const guy1 = $("guy1");
+  const hat = $("hat");
+  const guyWithHat1 = $("guyWithHat1");
+  const door = $("door");
+
+  // Keep the hat resting just above the guy's head, whatever his image height is.
+  function placeHat() {
+    if (hat.classList.contains("hidden")) return;
+    const stageH = $("scene1").clientHeight;
+    const guyRect = guy1.getBoundingClientRect();
+    hat.style.bottom = (stageH - guyRect.top + 4) + "px";
+  }
+  guy1.querySelector("img").addEventListener("load", placeHat);
+  window.addEventListener("resize", placeHat);
+  placeHat();
+
+  hat.addEventListener("click", () => {
+    guy1.classList.add("hidden");
+    hat.classList.add("hidden");
+    guyWithHat1.classList.remove("hidden");
+    door.classList.remove("hidden");
+  });
+
+  // Drag the guy (mouse or touch) onto the door to go to Scene 2.
+  let drag = null;
+
+  function overlaps(a, b) {
+    const r1 = a.getBoundingClientRect();
+    const r2 = b.getBoundingClientRect();
+    return r1.left < r2.right && r1.right > r2.left && r1.top < r2.bottom && r1.bottom > r2.top;
+  }
+
+  guyWithHat1.addEventListener("pointerdown", (e) => {
+    const rect = guyWithHat1.getBoundingClientRect();
+    drag = {
+      id: e.pointerId,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+    guyWithHat1.setPointerCapture(e.pointerId);
+    guyWithHat1.classList.add("dragging");
+    // Switch from bottom/left anchoring to free left/top positioning.
+    guyWithHat1.style.bottom = "auto";
+    guyWithHat1.style.left = rect.left + "px";
+    guyWithHat1.style.top = rect.top + "px";
+    e.preventDefault();
+  });
+
+  guyWithHat1.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    guyWithHat1.style.left = (e.clientX - drag.offsetX) + "px";
+    guyWithHat1.style.top = (e.clientY - drag.offsetY) + "px";
+    door.classList.toggle("glow", overlaps(guyWithHat1, door));
+  });
+
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag = null;
+    guyWithHat1.classList.remove("dragging");
+    door.classList.remove("glow");
+    if (overlaps(guyWithHat1, door)) startScene2();
+  }
+  guyWithHat1.addEventListener("pointerup", endDrag);
+  guyWithHat1.addEventListener("pointercancel", endDrag);
+
+  /* ---------- Scene 2 ---------- */
+  const guy2 = $("guy2");
+  const car = $("car");
+  let carClicked = false;
+
+  function startScene2() {
+    $("scene1").classList.remove("active");
+    $("scene2").classList.add("active");
+  }
+
+  car.addEventListener("click", () => {
+    if (carClicked) return;
+    carClicked = true;
+
+    guy2.classList.add("hidden");
+    const carImg = car.querySelector("img");
+    carImg.src = "assets/car-with-driver.png";
+    carImg.classList.add("shake");
+
+    setTimeout(() => {
+      carImg.classList.remove("shake");
+      car.classList.add("driving");
+      const distance = CAR_EXIT_DIRECTION === "left" ? "-100vw" : "100vw";
+      car.style.transform = `translateX(calc(-50% + ${distance}))`;
+    }, 1000);
+  });
+</script>
+</body>
+</html>
